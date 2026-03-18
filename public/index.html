@@ -1,0 +1,997 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>先别买 &middot; Don&rsquo;t Buy Yet</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,300&display=swap" rel="stylesheet" />
+  <script>tailwind.config={theme:{extend:{fontFamily:{sans:["DM Sans","sans-serif"],serif:["Instrument Serif","Georgia","serif"]}}}}</script>
+  <style>
+    *{box-sizing:border-box}body{margin:0;font-family:'DM Sans',sans-serif;background:#E8E7E1;min-height:100vh}
+    .hs::-webkit-scrollbar{display:none}.hs{-ms-overflow-style:none;scrollbar-width:none}
+    .pa{animation:pa .38s cubic-bezier(.16,1,.3,1) both}
+    @keyframes pa{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+    .a1{animation-delay:.08s}.a2{animation-delay:.16s}.a3{animation-delay:.24s}.a4{animation-delay:.32s}.a5{animation-delay:.48s}
+    .sc{animation:sc .42s cubic-bezier(.22,1,.36,1) both}
+    @keyframes sc{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:scale(1)}}
+    .cp{animation:cp .45s cubic-bezier(.22,1,.36,1) .2s both}
+    @keyframes cp{from{opacity:0;transform:scale(0)}to{opacity:1;transform:scale(1)}}
+    .spin{animation:spin 1s linear infinite}
+    @keyframes spin{from{transform:rotate(0)}to{transform:rotate(360deg)}}
+    @keyframes progress-pulse{0%{width:20%}50%{width:80%}100%{width:20%}}
+    .sb{position:relative;overflow:hidden}
+    .sb::after{content:'';position:absolute;right:0;top:0;bottom:0;width:2rem;
+      background:linear-gradient(to right,transparent,rgba(255,255,255,.45));
+      animation:sh 1.6s ease-in-out infinite}
+    @keyframes sh{0%,100%{opacity:.3}50%{opacity:1}}
+    input,textarea{font-family:'DM Sans',sans-serif;font-size:15px}
+    input:focus,textarea:focus{outline:none}
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none}
+    button,[role=button]{-webkit-tap-highlight-color:transparent;cursor:pointer}
+    .press:active{transform:scale(.98);transition:transform .1s}
+    .grain{background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+</style>
+</head>
+<body><div id="root"></div>
+<script>
+const {useState,useEffect,useRef,useCallback}=React;
+const h=React.createElement;
+
+// ── API UTILS ──────────────────────────────────────────────────────
+const API_BASE=window.location.hostname==='localhost'?'http://localhost:3001':'http://localhost:3001';
+function getDeviceId(){
+  let id=localStorage.getItem('xbm_device_id');
+  if(!id){id=crypto.randomUUID();localStorage.setItem('xbm_device_id',id);}
+  return id;
+}
+async function api(path,options={}){
+  const url=API_BASE+path;
+  let res;
+  try{
+    res=await fetch(url,{
+      ...options,
+      headers:{'Content-Type':'application/json','x-device-id':getDeviceId(),...(options.headers||{})},
+    });
+  }catch(e){
+    throw new Error('无法连接到服务器，请确认后端已启动（localhost:3000）');
+  }
+  const json=await res.json();
+  if(!res.ok)throw new Error(json.error?.message||'请求失败 '+res.status);
+  return json.data;
+}
+async function uploadFile(file){
+  const fd=new FormData();fd.append('file',file);
+  let res;
+  try{
+    res=await fetch(API_BASE+'/api/upload',{method:'POST',headers:{'x-device-id':getDeviceId()},body:fd});
+  }catch(e){
+    throw new Error('上传失败，请确认后端已启动');
+  }
+  const json=await res.json();
+  if(!res.ok)throw new Error(json.error?.message||'上传失败');
+  return json.data.url;
+}
+function getCurrentItemId(){return localStorage.getItem('xbm_current_item');}
+function setCurrentItemId(id){localStorage.setItem('xbm_current_item',id);}
+
+// ── ICONS ──────────────────────────────────────────────────────────
+const SI=(d,p={})=>h('svg',{xmlns:'http://www.w3.org/2000/svg',width:p.size||20,height:p.size||20,viewBox:'0 0 24 24',fill:'none',stroke:'currentColor',strokeWidth:p.sw||2,strokeLinecap:'round',strokeLinejoin:'round',className:p.cls||'',dangerouslySetInnerHTML:{__html:d}});
+const IPlus   =p=>SI('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',{...p,sw:2.5});
+const IArrowR =p=>SI('<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>',p);
+const ISearch =p=>SI('<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',p);
+const ISpark  =p=>SI('<path d="m12 3-1.9 5.8a2 2 0 0 1-1.287 1.288L3 12l5.8 1.9a2 2 0 0 1 1.288 1.287L12 21l1.9-5.8a2 2 0 0 1 1.287-1.288L21 12l-5.8-1.9a2 2 0 0 1-1.288-1.287z"/>',p);
+const IClock  =p=>SI('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>',p);
+const ICheck  =p=>SI('<polyline points="20 6 9 17 4 12"/>',p);
+const ICheckC =p=>SI('<path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/>',p);
+const IX      =p=>SI('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>',p);
+const IChevL  =p=>SI('<polyline points="15 18 9 12 15 6"/>',p);
+const IChevR  =p=>SI('<polyline points="9 18 15 12 9 6"/>',p);
+const ITrendD =p=>SI('<polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/>',p);
+const ITrendU =p=>SI('<polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/>',p);
+const IAlert  =p=>SI('<circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>',p);
+const IBox    =p=>SI('<line x1="16.5" y1="9.4" x2="7.5" y2="4.21"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/>',p);
+const ILamp   =p=>SI('<line x1="9" y1="18" x2="15" y2="18"/><line x1="10" y1="22" x2="14" y2="22"/><path d="M15.09 14c.18-.98.65-1.74 1.41-2.5A4.65 4.65 0 0 0 18 8 6 6 0 0 0 6 8c0 1 .23 2.23 1.5 3.5A4.61 4.61 0 0 1 8.91 14"/>',p);
+const IUpload =p=>SI('<polyline points="16 16 12 12 8 16"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3"/>',p);
+const IImg    =p=>SI('<rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/>',p);
+const ILink   =p=>SI('<path d="M15 7h3a5 5 0 0 1 5 5 5 5 0 0 1-5 5h-3m-6 0H6a5 5 0 0 1-5-5 5 5 0 0 1 5-5h3"/><line x1="8" y1="12" x2="16" y2="12"/>',p);
+const IType   =p=>SI('<polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/>',p);
+const ILoad   =p=>SI('<path d="M21 12a9 9 0 1 1-6.219-8.56"/>',{...p,cls:'spin'});
+
+// ── ROUTER ─────────────────────────────────────────────────────────
+const RC=React.createContext(null);
+function Router({children}){
+  const [route,setRoute]=useState('/');
+  const hist=useRef(['/']);
+  const navigate=useCallback((path)=>{
+    if(path===-1){if(hist.current.length>1){hist.current.pop();setRoute(hist.current[hist.current.length-1]);}}
+    else{hist.current.push(path);setRoute(path);}
+  },[]);
+  return h(RC.Provider,{value:{route,navigate}},children);
+}
+const useNav=()=>React.useContext(RC).navigate;
+const useRoute=()=>React.useContext(RC).route;
+
+// ── LAYOUT ─────────────────────────────────────────────────────────
+function Layout({children,title,showBack}){
+  const nav=useNav();
+  return h('div',{className:'min-h-screen bg-[#E8E7E1] flex items-start justify-center py-4 px-2'},
+    h('div',{className:'w-full max-w-[390px] bg-white rounded-[2rem] overflow-hidden flex flex-col',
+      style:{minHeight:'min(812px,calc(100vh - 2rem))',boxShadow:'0 16px 64px rgba(0,0,0,.12)'}},
+      (title||showBack)&&h('header',{className:'sticky top-0 z-10 bg-white border-b border-black/[.06] px-5 py-4 flex items-center gap-3'},
+        showBack&&h('button',{onClick:()=>nav(-1),className:'p-1 -ml-1 hover:bg-black/5 rounded-lg transition-colors'},h(IChevL,{size:20})),
+        title&&h('h1',{className:'text-[17px] font-medium flex-1 text-[#1A1A1A] tracking-tight'},title)
+      ),
+      h('main',{className:'flex-1 flex flex-col'},children)
+    )
+  );
+}
+
+// ── STATUS BADGE ───────────────────────────────────────────────────
+function SBadge({status}){
+  const cfg={
+    analyzing:{l:'分析中',s:'bg-blue-50 text-blue-700 border-blue-200'},
+    cooling:{l:'冷静中',s:'bg-amber-50 text-amber-700 border-amber-200'},
+    bought:{l:'已购买',s:'bg-gray-100 text-gray-700 border-gray-200'},
+    resisted:{l:'已忍住',s:'bg-green-50 text-green-700 border-green-200'},
+    waiting:{l:'再等等',s:'bg-purple-50 text-purple-700 border-purple-200'},
+  }[status];
+  return h('span',{className:`inline-flex items-center px-2.5 py-1 rounded-full text-xs border ${cfg.s}`},cfg.l);
+}
+
+// ── STAT CARD ──────────────────────────────────────────────────────
+function StatCard({label,value,icon}){
+  return h('div',{className:'bg-white border border-black/[.06] rounded-xl p-4'},
+    h('div',{className:'flex items-start justify-between mb-2'},
+      h('span',{className:'text-sm text-[#8C8B88]'},label),
+      icon&&h('div',{className:'text-[#8C8B88]'},icon)
+    ),
+    h('div',{className:'text-2xl font-medium tracking-tight text-[#1A1A1A]'},value)
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// HOME PAGE
+// ════════════════════════════════════════════════════════════════════
+function HomePage(){
+  const nav=useNav();
+  const [stats,setStats]=useState(null);
+  const [coolingItems,setCoolingItems]=useState([]);
+  const [recentItems,setRecentItems]=useState([]);
+  const [tick,setTick]=useState(0);
+  const serif={fontFamily:'Instrument Serif, Georgia, serif',fontStyle:'italic',fontWeight:300};
+
+  useEffect(()=>{
+    api('/api/stats').then(setStats).catch(()=>{});
+    api('/api/items?status=COOLING&limit=5').then(d=>setCoolingItems(d.items||[])).catch(()=>{});
+    api('/api/items?limit=5').then(d=>{
+      // 最近2条非COOLING记录
+      const all=d.items||[];
+      setRecentItems(all.filter(i=>i.status!=='COOLING').slice(0,2));
+    }).catch(()=>{});
+    const iv=setInterval(()=>setTick(t=>t+1),1000);
+    return()=>clearInterval(iv);
+  },[]);
+
+  const savedAmount=stats?.savedAmount||0;
+  const resistedCount=stats?.resistedCount||0;
+  const topCat=stats?.topCategories?.[0]?.category||'数码产品';
+
+  const getItemStatus=(item)=>{
+    if(item.decision?.outcome==='BOUGHT')return{l:'已购买',s:'bg-gray-100 text-gray-600'};
+    if(item.decision?.outcome==='SKIPPED')return{l:'已忍住',s:'bg-green-50 text-green-700'};
+    if(item.decision?.outcome==='WAITING')return{l:'再等等',s:'bg-purple-50 text-purple-700'};
+    if(item.status==='ANALYZED')return{l:'待决策',s:'bg-blue-50 text-blue-700'};
+    if(item.status==='ANALYZING')return{l:'分析中',s:'bg-yellow-50 text-yellow-700'};
+    return{l:'待分析',s:'bg-gray-50 text-gray-500'};
+  };
+
+  return h(Layout,null,
+    h('div',{className:'flex-1 flex flex-col bg-[#F5F4F0] relative overflow-hidden'},
+      h('div',{className:'absolute inset-0 grain opacity-[.035] pointer-events-none mix-blend-multiply z-0'}),
+      h('div',{className:'flex-1 px-6 pt-12 pb-32 overflow-y-auto hs relative z-10'},
+        // Header
+        h('div',{className:'px-1 pa'},
+          h('div',{className:'text-[10px] tracking-[.25em] text-[#8C8B88] uppercase font-medium mb-8'},"Don't Buy Yet"),
+          h('h1',{className:'text-[38px] font-medium tracking-tight text-[#1A1A1A] leading-[1.15]'},
+            '让冲动',h('br'),
+            h('span',{style:{...serif,color:'#73726E',fontSize:'38px'}},'先停一停。')
+          ),
+          h('p',{className:'mt-4 text-[15px] text-[#73726E] leading-relaxed font-light tracking-wide max-w-[240px]'},'不是不让你买，是别急着买。'),
+          h('div',{
+            onClick:()=>nav('/input'),
+            className:'mt-8 w-full bg-white h-[60px] rounded-2xl flex items-center px-4 border border-black/[.06] hover:border-black/20 transition-all press cursor-pointer',
+            style:{boxShadow:'0 8px 30px rgba(0,0,0,.03)'}
+          },
+            h(ISearch,{size:20,cls:'text-[#8C8B88] mr-3'}),
+            h('div',{className:'flex-1 text-left text-[15px] text-[#8C8B88] font-light'},'输入你想买的商品...'),
+            h('div',{className:'w-9 h-9 rounded-full bg-[#1A1A1A] flex items-center justify-center',style:{boxShadow:'0 2px 8px rgba(0,0,0,.15)'}},
+              h(IPlus,{size:18,cls:'text-white'})
+            )
+          )
+        ),
+        // Saved Value
+        h('div',{className:'mt-14 px-1 pa a2'},
+          h('div',{className:'flex items-baseline justify-between mb-2'},
+            h('span',{className:'text-[10px] tracking-[.2em] text-[#8C8B88] uppercase font-medium'},'Saved Value'),
+            h('button',{onClick:()=>nav('/stats'),className:'flex items-center gap-1.5 text-[12px] text-[#1A1A1A] hover:text-[#73726E] transition-colors'},
+              '查看完整账单',h(IArrowR,{size:14})
+            )
+          ),
+          h('div',{className:'flex items-baseline'},
+            h('span',{style:{...serif,fontSize:'24px',color:'#73726E',marginRight:'6px'}},'¥'),
+            h('span',{style:{...serif,fontSize:'52px',color:'#1A1A1A',lineHeight:1,letterSpacing:'-2px'}},savedAmount.toLocaleString())
+          ),
+          h('div',{className:'mt-5 p-3.5 rounded-[14px] border border-black/[.05] flex gap-3 items-start',style:{background:'rgba(26,26,26,.03)'}},
+            h('div',{className:'mt-0.5 bg-white p-1 rounded-md border border-black/5',style:{boxShadow:'0 1px 4px rgba(0,0,0,.06)'}},
+              h(ISpark,{size:14,cls:'text-[#1A1A1A]'})
+            ),
+            resistedCount>0
+              ?h('p',{className:'text-[13px] text-[#5C5B58] leading-[1.6] pr-2'},
+                  h('span',{className:'text-[#1A1A1A] font-medium'},'行为洞察：'),
+                  '你已忍住 ',
+                  h('span',{className:'text-[#1A1A1A] font-medium underline underline-offset-2 decoration-black/20'},resistedCount+' 次'),
+                  ' 冲动消费，最高发类别是「'+topCat+'」。'
+                )
+              :h('p',{className:'text-[13px] text-[#5C5B58] leading-[1.6] pr-2'},'添加第一件想买的商品，开始记录你的消费决策。')
+          )
+        ),
+        // Cooling Room
+        h('div',{className:'mt-14 pa a3'},
+          h('div',{className:'flex items-center justify-between mb-5 px-1'},
+            h('span',{className:'text-[10px] tracking-[.2em] text-[#8C8B88] uppercase font-medium'},'Cooling Room'),
+            h('span',{className:'text-[10px] text-[#8C8B88] font-medium tracking-wider'},coolingItems.length+' ITEMS')
+          ),
+          coolingItems.length===0
+            ?h('div',{className:'text-center py-4 text-[#8C8B88] text-sm'},'暂无冷静中的商品')
+            :h('div',{className:'flex flex-col gap-3'},
+              coolingItems.map(item=>{
+                const expiresAt=item.cooldown?.expiresAt?new Date(item.cooldown.expiresAt):null;
+                const remainMs=expiresAt?Math.max(0,expiresAt-Date.now()):0;
+                const totalMs=item.cooldown?.duration?item.cooldown.duration*3600000:1;
+                const pct=expiresAt?Math.round(((totalMs-remainMs)/totalMs)*100):0;
+                const hh=Math.floor(remainMs/3600000);
+                const mm=Math.floor((remainMs%3600000)/60000);
+                const ss=Math.floor((remainMs%60000)/1000);
+                const pad=n=>String(n).padStart(2,'0');
+                return h('div',{key:item.id,
+                  onClick:()=>{setCurrentItemId(item.id);nav('/decision');},
+                  className:'relative bg-[#FCFCFA] rounded-[20px] p-5 border border-black/[.06] press cursor-pointer overflow-hidden',
+                  style:{boxShadow:'0 4px 20px rgba(0,0,0,.02)'}
+                },
+                  h('div',{className:'flex justify-between items-start mb-5'},
+                    h('div',{className:'pr-4'},
+                      h('h4',{className:'text-[16px] text-[#1A1A1A] font-medium tracking-tight mb-1'},item.name),
+                      h('p',{className:'text-[13px] text-[#8C8B88] font-light'},'¥'+item.price.toLocaleString()+(item.category?' · '+item.category:''))
+                    ),
+                    expiresAt&&h('div',{className:'px-2.5 py-1.5 rounded-full bg-black/[.04] border border-black/[.05] text-[12px] font-medium text-[#1A1A1A] flex items-center gap-1.5 shrink-0'},
+                      h(IClock,{size:12,cls:'text-[#73726E]'}),
+                      h('span',{className:'tabular-nums font-mono'},pad(hh)+':'+pad(mm)+':'+pad(ss))
+                    )
+                  ),
+                  h('div',{className:'flex items-center gap-3'},
+                    h('div',{className:'flex-1 h-1 bg-black/[.04] rounded-full overflow-hidden sb'},
+                      h('div',{className:'h-full bg-black/20 rounded-full',style:{width:pct+'%'}})
+                    ),
+                    h('span',{className:'text-[11px] text-[#8C8B88] font-medium tracking-wide'},'冷静中')
+                  )
+                );
+              })
+            ),
+          // 最近记录（非冷静中）
+          recentItems.length>0&&h('div',{className:'mt-4 flex flex-col gap-2'},
+            recentItems.map(item=>{
+              const st=getItemStatus(item);
+              const isAnalyzed=item.status==='ANALYZED';
+              const isAnalyzing=item.status==='ANALYZING'||item.status==='PENDING';
+              return h('div',{key:item.id,
+                className:'flex items-center gap-2 bg-white/60 rounded-2xl px-4 py-3.5 border border-black/[.05] hover:bg-white/80 transition-colors'
+              },
+                h('div',{className:'flex-1 min-w-0 pr-2 cursor-pointer',
+                  onClick:()=>{
+                    setCurrentItemId(item.id);
+                    if(isAnalyzed||isAnalyzing)nav('/analysis');
+                    else nav('/stats');
+                  }
+                },
+                  h('p',{className:'text-[14px] font-medium text-[#1A1A1A] truncate'},item.name),
+                  h('p',{className:'text-[12px] text-[#8C8B88] mt-0.5'},'¥'+item.price.toLocaleString()+(item.category?' · '+item.category:''))
+                ),
+                h('span',{className:`text-[11px] px-2.5 py-1 rounded-full font-medium shrink-0 cursor-pointer ${st.s}`,
+                  onClick:()=>{
+                    setCurrentItemId(item.id);
+                    if(isAnalyzed||isAnalyzing)nav('/analysis');
+                    else nav('/stats');
+                  }
+                },st.l),
+                h('button',{
+                  onClick:async(e)=>{
+                    e.stopPropagation();
+                    try{
+                      await api(`/api/items/${item.id}`,{method:'DELETE'});
+                      setRecentItems(prev=>prev.filter(i=>i.id!==item.id));
+                    }catch(err){console.warn('删除失败',err);}
+                  },
+                  className:'shrink-0 w-7 h-7 flex items-center justify-center rounded-full hover:bg-black/[.06] transition-colors text-[#B0AFA8] hover:text-[#5C5B58]'
+                },h(IX,{size:14}))
+              );
+            })
+          )
+        )
+      )
+    )
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// INPUT PAGE
+// ════════════════════════════════════════════════════════════════════
+function InputPage(){
+  const nav=useNav();
+  const [method,setMethod]=useState('image');
+  const [price,setPrice]=useState('');
+  const [name,setName]=useState('');
+  const [reason,setReason]=useState('');
+  const [category,setCategory]=useState('');
+  const [loading,setLoading]=useState(false);
+  const [imagePreview,setImagePreview]=useState(null);
+  const [imageUrl,setImageUrl]=useState(null);
+  const [recognizing,setRecognizing]=useState(false);
+  const [recognizeError,setRecognizeError]=useState(false);
+  const fileRef=useRef(null);
+
+  const CATS=['服饰','数码','美妆','家居','奢侈品','运动','食品','其他'];
+
+  const handleFile=async(file)=>{
+    if(!file)return;
+    setImagePreview(URL.createObjectURL(file));
+    setImageUrl(null);setName('');setCategory('');
+    setRecognizing(true);setRecognizeError(false);
+    try{
+      const url=await uploadFile(file);
+      setImageUrl(url);
+      const rec=await api('/api/items/recognize',{method:'POST',body:JSON.stringify({type:'IMAGE',imageUrl:url})});
+      if(rec.name)setName(rec.name);
+      if(rec.category)setCategory(rec.category);
+      if(rec.estimatedPrice&&!price)setPrice(String(rec.estimatedPrice));
+    }catch(e){console.warn('识别失败',e);setRecognizeError(true);}
+    finally{setRecognizing(false);}
+  };
+
+  const submit=async()=>{
+    if(!price){alert('请输入购买价格');return;}
+    if(!name&&!imageUrl){alert('请输入商品名称或上传图片');return;}
+    if(method==='image'&&!imagePreview){alert('请上传商品图片');return;}
+    setLoading(true);
+    try{
+      const data=await api('/api/items',{
+        method:'POST',
+        body:JSON.stringify({
+          name:name||(method==='image'?'图片商品':'未命名商品'),
+          price:parseFloat(price),
+          inputType:method==='image'?'IMAGE':'MANUAL',
+          imageUrl:imageUrl||undefined,
+          category:category||undefined,
+          reason:reason||undefined,
+        }),
+      });
+      setCurrentItemId(data.itemId);
+      nav('/analysis');
+    }catch(e){alert(e.message);setLoading(false);}
+  };
+
+  const iBase='w-full px-4 py-3 bg-[#f3f3f5] border border-transparent rounded-xl focus:border-[#1A1A1A]/20 focus:bg-white transition-colors';
+  return h(Layout,{title:'商品信息',showBack:true},
+    h('div',{className:'flex-1 flex flex-col px-5 py-6 overflow-y-auto hs'},
+      h('div',{className:'flex gap-2 mb-5 p-1 bg-[#f3f3f5] rounded-xl'},
+        [['image','上传图片',h(IImg,{size:15})],['manual','手动输入',h(IType,{size:15})]].map(([m,lbl,icon])=>
+          h('button',{key:m,onClick:()=>setMethod(m),className:`flex-1 py-2.5 rounded-lg transition-all flex items-center justify-center gap-1.5 text-sm ${method===m?'bg-white shadow-sm text-[#1A1A1A] font-medium':'text-[#8C8B88]'}`},
+            icon,lbl
+          )
+        )
+      ),
+      method==='image'&&h('div',{className:'mb-4'},
+        h('input',{type:'file',accept:'image/*',ref:fileRef,className:'hidden',onChange:e=>handleFile(e.target.files[0])}),
+        h('div',{onClick:()=>fileRef.current?.click(),className:'border-2 border-dashed border-black/10 rounded-xl overflow-hidden cursor-pointer hover:border-black/20 transition-colors'},
+          imagePreview
+            ?h('div',null,
+                h('div',{className:'relative'},
+                  h('img',{src:imagePreview,className:'w-full h-48 object-cover'}),
+                  recognizing&&h('div',{className:'absolute inset-0 bg-black/50 flex flex-col items-center justify-center'},
+                    h(ILoad,{size:28,cls:'text-white mb-2'}),
+                    h('p',{className:'text-white text-sm font-medium'},'AI 识别中...')
+                  )
+                ),
+                !recognizing&&h('div',{className:'px-4 py-3 bg-white border-t border-black/[.06]'},
+                  h('p',{className:'text-xs text-[#8C8B88] mb-1'},recognizeError?'识别失败，请手动填写':'AI 识别结果（可修改）'),
+                  h('input',{type:'text',placeholder:'商品名称',value:name,onChange:e=>setName(e.target.value),onClick:e=>e.stopPropagation(),className:'w-full text-sm text-[#1A1A1A] bg-transparent outline-none font-medium placeholder:text-[#C0BFBB]'})
+                )
+              )
+            :h('div',{className:'p-10 text-center'},
+                h(IUpload,{size:28,cls:'mx-auto mb-3 text-[#B0AFA8]'}),
+                h('p',{className:'text-sm text-[#8C8B88]'},'点击上传商品图片'),
+                h('p',{className:'text-xs text-[#B0AFA8] mt-1'},'上传后 AI 自动识别商品名称')
+              )
+        )
+      ),
+      method==='manual'&&h('div',{className:'mb-4'},
+        h('label',{className:'block mb-2 text-sm font-medium text-[#1A1A1A]'},'商品名称'),
+        h('input',{type:'text',placeholder:'例如：iPhone 15 Pro Max 256GB',value:name,onChange:e=>setName(e.target.value),className:iBase})
+      ),
+      h('div',{className:'mb-4'},
+        h('label',{className:'block mb-2 text-sm font-medium text-[#1A1A1A]'},'购买价格 ',h('span',{className:'text-red-500'},'*')),
+        h('div',{className:'relative'},
+          h('span',{className:'absolute left-4 top-1/2 -translate-y-1/2 text-[#8C8B88]'},'¥'),
+          h('input',{type:'number',placeholder:'0.00',value:price,onChange:e=>setPrice(e.target.value),className:'w-full pl-8 pr-4 py-3 bg-[#f3f3f5] border border-transparent rounded-xl focus:border-[#1A1A1A]/20 focus:bg-white transition-colors'})
+        )
+      ),
+      h('div',{className:'mb-4'},
+        h('label',{className:'block mb-2 text-sm font-medium text-[#1A1A1A] flex items-center gap-1.5'},
+          '商品分类',
+          category&&h('span',{className:'text-[10px] text-[#8C8B88] font-normal'},'（AI 已识别，可修改）')
+        ),
+        h('div',{className:'flex flex-wrap gap-2'},
+          CATS.map(c=>
+            h('button',{key:c,onClick:()=>setCategory(category===c?'':c),
+              className:`px-3.5 py-1.5 rounded-full text-sm border transition-all ${
+                category===c
+                  ?'bg-[#1A1A1A] text-white border-[#1A1A1A]'
+                  :'bg-white text-[#3A3A38] border-black/[.08] hover:border-black/20'
+              }`
+            },c)
+          )
+        )
+      ),
+      h('div',{className:'mb-6'},
+        h('label',{className:'block mb-2 text-sm font-medium text-[#8C8B88]'},'为什么想买？（可选）'),
+        h('textarea',{rows:3,placeholder:'例如：好看但已经有很多裙子了，衣柜快放不下了，有点纠结...',value:reason,onChange:e=>setReason(e.target.value),className:iBase+' resize-none'})
+      ),
+      h('button',{onClick:submit,disabled:loading||recognizing,className:'w-full bg-[#1A1A1A] text-white py-4 rounded-xl hover:bg-[#2A2A2A] transition-colors disabled:opacity-50 flex items-center justify-center gap-2 text-[15px] font-medium mt-auto'},
+        loading?[h(ILoad,{size:20,key:'i'}),' 分析中...']
+        :recognizing?[h(ILoad,{size:20,key:'i'}),' 识别中...']
+        :'开始分析'
+      )
+    )
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// ANALYSIS PAGE
+// ════════════════════════════════════════════════════════════════════
+function AnalysisPage(){
+  const nav=useNav();
+  const [analysis,setAnalysis]=useState(null);
+  const [status,setStatus]=useState('ANALYZING');
+  const [item,setItem]=useState(null);
+  const [tick,setTick]=useState(0);
+  const startTime=useRef(Date.now());
+  const card='bg-white border border-black/[.06] rounded-xl p-4 mb-4';
+  const dot=h('span',{className:'text-[#8C8B88] mt-0.5 mr-2'},'·');
+
+  useEffect(()=>{
+    const itemId=getCurrentItemId();
+    if(!itemId){nav('/input');return;}
+    api(`/api/items/${itemId}/analysis`,{method:'POST'}).catch(()=>{});
+    api(`/api/items/${itemId}`).then(d=>setItem(d.item)).catch(()=>{});
+    // 每秒更新进度条
+    const ticker=setInterval(()=>setTick(t=>t+1),1000);
+    // 轮询分析结果
+    const timer=setInterval(async()=>{
+      try{
+        const d=await api(`/api/items/${itemId}/analysis`);
+        setStatus(d.status);
+        if(d.status==='ANALYZED'&&d.analysis){
+          setAnalysis(d.analysis);
+          clearInterval(timer);
+          clearInterval(ticker);
+        }
+      }catch(e){console.error(e);}
+    },2000);
+    return()=>{clearInterval(timer);clearInterval(ticker);};
+  },[]);
+
+  // 分析中 loading 状态
+  const steps=[
+    {label:'识别商品图片',icon:'🔍',duration:8},
+    {label:'搜索网上评价',icon:'🌐',duration:15},
+    {label:'对比市场价格',icon:'💰',duration:20},
+    {label:'生成分析报告',icon:'✨',duration:30},
+  ];
+  if(status==='ANALYZING'||status==='PENDING')return h(Layout,{title:'分析中'},
+    h('div',{className:'flex-1 flex flex-col px-5 py-10'},
+      h('div',{className:'mb-10'},
+        h('div',{className:'w-14 h-14 bg-[#1A1A1A] rounded-2xl flex items-center justify-center mb-5'},
+          h(ILoad,{size:28,cls:'text-white'})
+        ),
+        h('h2',{className:'text-xl font-medium text-[#1A1A1A] mb-1'},'AI 正在分析'),
+        h('p',{className:'text-sm text-[#8C8B88]'},'Gemini + Tavily + DeepSeek 三步联动')
+      ),
+      h('div',{className:'space-y-4'},
+        steps.map((s,i)=>{
+          const elapsed=Math.floor((Date.now()-startTime.current)/1000)+tick*0;
+          const done=elapsed>s.duration;
+          const active=!done&&(i===0||elapsed>steps[i-1].duration);
+          return h('div',{key:i,className:`flex items-center gap-4 p-4 rounded-xl transition-all ${done?'bg-[#f3f3f5]':active?'bg-[#1A1A1A]':'bg-[#f3f3f5] opacity-40'}`},
+            h('div',{className:'text-xl'},s.icon),
+            h('div',{className:'flex-1'},
+              h('p',{className:`text-sm font-medium ${active?'text-white':'text-[#1A1A1A]'}`},s.label),
+              active&&h('div',{className:'mt-2 h-1 bg-white/20 rounded-full overflow-hidden'},
+                h('div',{className:'h-full bg-white rounded-full',style:{width:'60%',animation:'progress-pulse 2s ease-in-out infinite'}})
+              )
+            ),
+            done&&h('div',{className:'text-green-500 text-lg'},'✓')
+          );
+        })
+      ),
+      h('p',{className:'mt-8 text-xs text-[#8C8B88] text-center'},'约需 20-30 秒，请耐心等待')
+    )
+  );
+
+  // 分析完成后渲染
+  const pros=analysis?.pros||[];
+  const cons=analysis?.cons||[];
+  const alternatives=analysis?.alternatives||[];
+  const itemName=item?.name||'商品';
+  const itemPrice=item?.price||0;
+
+  return h(Layout,{title:'分析结果',showBack:true},
+    h('div',{className:'flex-1 overflow-y-auto hs px-5 py-6'},
+      h('div',{className:card+' pa'},
+        h('div',{className:'flex items-start gap-3'},
+          h('div',{className:'w-20 h-20 bg-[#f3f3f5] rounded-lg flex items-center justify-center flex-shrink-0'},
+            item?.imageUrl
+              ?h('img',{src:API_BASE+item.imageUrl,className:'w-full h-full object-cover rounded-lg'})
+              :h(IBox,{size:32,cls:'text-[#8C8B88]'})
+          ),
+          h('div',{className:'flex-1 min-w-0'},
+            h('h3',{className:'text-[16px] font-medium text-[#1A1A1A] mb-1'},itemName),
+            h('p',{className:'text-sm text-[#8C8B88] mb-1'},'¥'+itemPrice.toLocaleString()),
+            item?.category&&h('p',{className:'text-xs text-[#8C8B88]'},item.category)
+          )
+        )
+      ),
+      h('div',{className:card+' pa a1'},
+        h('div',{className:'flex items-center gap-2 mb-3'},h(ITrendD,{size:18}),h('h3',{className:'text-[15px] font-medium text-[#1A1A1A]'},'价格分析')),
+        (()=>{
+          let pa=analysis?.priceAnalysis||'';
+          let paObj=null;
+          try{if(pa.startsWith('{'))paObj=JSON.parse(pa);}catch(e){}
+          if(paObj){
+            const userP=paObj.userPrice||itemPrice;
+            const mktP=paObj.marketAvgPrice;
+            const shP=paObj.secondHandPrice;
+            const pddP=paObj.pddPrice;
+            const diff=mktP?userP-mktP:0;
+            const diffText=diff>0?'高于市场价 ¥'+diff.toLocaleString():diff<0?'低于市场价 ¥'+Math.abs(diff).toLocaleString():'与市场价持平';
+            return h('div',null,
+              h('div',{className:'space-y-0 mb-3'},
+                h('div',{className:'flex justify-between items-center py-2.5 border-b border-black/[.04]'},
+                  h('span',{className:'text-sm text-[#8C8B88]'},'你的买入价'),
+                  h('span',{className:'text-[17px] font-semibold text-[#1A1A1A]'},'¥'+userP.toLocaleString())
+                ),
+                mktP&&h('div',{className:'flex justify-between items-center py-2.5 border-b border-black/[.04]'},
+                  h('span',{className:'text-sm text-[#8C8B88]'},'淘宝/京东均价'),
+                  h('span',{className:'text-sm font-medium text-[#3A3A38]'},'¥'+mktP.toLocaleString())
+                ),
+                pddP&&h('div',{className:'flex justify-between items-center py-2.5 border-b border-black/[.04]'},
+                  h('span',{className:'text-sm text-[#8C8B88]'},'拼多多最低价'),
+                  h('span',{className:'text-sm font-medium text-orange-600'},'¥'+pddP.toLocaleString())
+                ),
+                shP&&h('div',{className:'flex justify-between items-center py-2.5'},
+                  h('span',{className:'text-sm text-[#8C8B88]'},'闲鱼/转转二手价'),
+                  h('span',{className:'text-sm font-medium text-[#3A3A38]'},'¥'+shP.toLocaleString())
+                )
+              ),
+              h('div',{className:`rounded-lg p-3 ${diff>0?'bg-amber-50 border border-amber-200':'bg-green-50 border border-green-200'}`},
+                h('p',{className:`text-sm ${diff>0?'text-amber-900':'text-green-900'}`},
+                  diffText,
+                  paObj.assessment&&h('span',null,'，'+paObj.assessment)
+                )
+              )
+            );
+          }
+          return h('div',{className:'bg-[#f3f3f5] rounded-lg p-3'},
+            h('p',{className:'text-sm text-[#3A3A38] leading-relaxed'},pa)
+          );
+        })()
+      ),
+      h('div',{className:card+' pa a2'},
+        h('div',{className:'flex items-center gap-2 mb-3'},h(ITrendU,{size:18}),h('h3',{className:'text-[15px] font-medium text-[#1A1A1A]'},'网上最常见的种草点')),
+        h('ul',{className:'space-y-2.5 text-sm text-[#3A3A38]'},
+          pros.map((t,i)=>
+            h('li',{key:i,className:'flex items-start'},dot,h('span',null,t))
+          )
+        )
+      ),
+      h('div',{className:card+' pa a3'},
+        h('div',{className:'flex items-center gap-2 mb-3'},h(IAlert,{size:18}),h('h3',{className:'text-[15px] font-medium text-[#1A1A1A]'},'网上最常见的拔草点')),
+        h('ul',{className:'space-y-2.5 text-sm text-[#3A3A38]'},
+          cons.map((t,i)=>
+            h('li',{key:i,className:'flex items-start'},dot,h('span',null,t))
+          )
+        )
+      ),
+      h('div',{className:card+' pa a4'},
+        h('div',{className:'flex items-center gap-2 mb-3'},h(IBox,{size:18}),h('h3',{className:'text-[15px] font-medium text-[#1A1A1A]'},'平替建议')),
+        h('div',{className:'space-y-3'},
+          alternatives.map((a,i)=>{
+            // 解析 "名称｜¥价格｜原因" 格式
+            const parts=a.split('｜');
+            const altName=parts[0]||a;
+            const altPrice=parts[1]||'';
+            const altReason=parts[2]||'';
+            const hasStructure=parts.length>=2;
+            return h('div',{key:i,className:'border border-black/[.06] rounded-lg p-3'},
+              hasStructure
+                ?h('div',null,
+                    h('div',{className:'flex items-center justify-between mb-1'},
+                      h('span',{className:'font-medium text-[#1A1A1A] text-sm'},altName),
+                      h('span',{className:'text-sm font-medium text-[#1A1A1A]'},altPrice)
+                    ),
+                    altReason&&h('p',{className:'text-xs text-[#8C8B88] mt-1'},altReason)
+                  )
+                :h('p',{className:'text-sm text-[#3A3A38] leading-relaxed'},a)
+            );
+          })
+        )
+      ),
+      h('div',{className:'bg-[#1A1A1A]/[.03] border border-black/10 rounded-xl p-4 mb-6 pa a5'},
+        h('div',{className:'flex items-center gap-2 mb-3'},h(ILamp,{size:18}),h('h3',{className:'text-[15px] font-medium text-[#1A1A1A]'},'AI 冷静建议')),
+        h('p',{className:'text-sm text-[#3A3A38] leading-relaxed'},analysis?.calmAdvice)
+      ),
+      h('div',{className:'sticky bottom-0 bg-white pt-4 pb-6 -mx-5 px-5 border-t border-black/[.06] space-y-3'},
+        h('button',{onClick:()=>nav('/cooldown'),className:'w-full bg-[#1A1A1A] text-white py-4 rounded-xl hover:bg-[#2A2A2A] transition-colors text-[15px] font-medium'},'开启冷静时间'),
+        h('button',{onClick:async()=>{
+          const itemId=getCurrentItemId();
+          try{
+            if(itemId)await api(`/api/items/${itemId}/decision`,{method:'POST',body:JSON.stringify({outcome:'BOUGHT'})});
+          }catch(e){}
+          nav('/');
+        },className:'w-full bg-white text-[#1A1A1A] border border-black/[.08] py-4 rounded-xl hover:bg-black/[.02] transition-colors text-[15px] font-medium'},'立即购买')
+      )
+    )
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// COOLDOWN PAGE
+// ════════════════════════════════════════════════════════════════════
+function CooldownPage(){
+  const nav=useNav();
+  const [selected,setSelected]=useState(null);
+  const [active,setActive]=useState(false);
+  const [rem,setRem]=useState({h:0,m:0,s:0});
+  const endRef=useRef(null);
+  useEffect(()=>{
+    if(!active)return;
+    const iv=setInterval(()=>{
+      const diff=endRef.current-Date.now();
+      if(diff<=0){clearInterval(iv);nav('/decision');return;}
+      setRem({h:Math.floor(diff/3600000),m:Math.floor((diff%3600000)/60000),s:Math.floor((diff%60000)/1000)});
+    },1000);
+    return()=>clearInterval(iv);
+  },[active]);
+  const start=async()=>{
+    if(!selected)return;
+    const itemId=getCurrentItemId();
+    try{
+      const data=await api(`/api/items/${itemId}/cooldown`,{method:'POST',body:JSON.stringify({duration:selected})});
+      endRef.current=new Date(data.expiresAt).getTime();
+    }catch(e){
+      // 如果已有冷静期，查询现有的
+      try{
+        const data=await api(`/api/items/${itemId}/cooldown`);
+        endRef.current=new Date(data.expiresAt).getTime();
+      }catch(e2){
+        endRef.current=Date.now()+selected*3600000;
+      }
+    }
+    setRem({h:selected,m:0,s:0});
+    setActive(true);
+  };
+  const pad=n=>String(n).padStart(2,'0');
+  const pct=active?((selected*3600-rem.h*3600-rem.m*60-rem.s)/(selected*3600))*100:0;
+  if(active)return h(Layout,{title:'冷静中',showBack:true},
+    h('div',{className:'flex-1 flex flex-col items-center justify-center px-5 py-12'},
+      h('div',{className:'w-20 h-20 bg-amber-50 rounded-full flex items-center justify-center mb-6'},h(IClock,{size:40,cls:'text-amber-600'})),
+      h('h2',{className:'text-xl font-medium text-[#1A1A1A] mb-3 text-center'},'先别急着下单'),
+      h('p',{className:'text-[#8C8B88] text-center mb-12 leading-relaxed text-[15px]'},'给自己一点时间，重新思考是否真的需要'),
+      h('div',{className:'w-full max-w-xs mb-12'},
+        h('div',{className:'grid grid-cols-3 gap-4 mb-4'},
+          [{v:rem.h,l:'小时'},{v:rem.m,l:'分钟'},{v:rem.s,l:'秒'}].map(({v,l},i)=>
+            h('div',{key:i,className:'text-center'},
+              h('div',{className:'bg-white border border-black/[.06] rounded-xl py-6 mb-2'},h('div',{className:'text-4xl tabular-nums font-medium text-[#1A1A1A]'},pad(v))),
+              h('div',{className:'text-sm text-[#8C8B88]'},l)
+            )
+          )
+        ),
+        h('div',{className:'w-full h-2 bg-black/[.04] rounded-full overflow-hidden'},
+          h('div',{className:'h-full bg-amber-500 rounded-full transition-all duration-1000',style:{width:pct+'%'}})
+        )
+      ),
+      h('div',{className:'w-full bg-white border border-black/[.06] rounded-xl p-4 mb-8'},
+        h('h4',{className:'mb-3 text-sm font-medium text-[#1A1A1A]'},'冷静期间可以思考：'),
+        h('ul',{className:'space-y-2 text-sm text-[#8C8B88]'},
+          ['这个东西买回来会经常用吗？','不买它会对生活有影响吗？','家里有没有类似的替代品？','这个价格是冲动消费还是理性需求？'].map((t,i)=>
+            h('li',{key:i,className:'flex items-start gap-2'},h('span',null,'·'),h('span',null,t))
+          )
+        )
+      ),
+      h('button',{onClick:()=>nav('/'),className:'w-full bg-[#f3f3f5] text-[#1A1A1A] py-4 rounded-xl hover:bg-[#e8e8ea] transition-colors font-medium'},'返回首页')
+    )
+  );
+  return h(Layout,{title:'选择冷静时间',showBack:true},
+    h('div',{className:'flex-1 flex flex-col px-5 py-6'},
+      h('div',{className:'mb-8'},
+        h('h2',{className:'text-xl font-medium text-[#1A1A1A] mb-3'},'给自己一点时间'),
+        h('p',{className:'text-[#8C8B88] leading-relaxed text-[15px]'},'研究表明，延迟购买决策可以有效降低冲动消费。选择一个冷静期，时间到了再决定是否购买。')
+      ),
+      h('div',{className:'space-y-3 mb-8'},
+        [[24,'适合日常小额消费'],[48,'适合中等金额商品'],[72,'适合高价值决策']].map(([hrs,desc])=>
+          h('button',{key:hrs,onClick:()=>setSelected(hrs),className:`w-full p-4 rounded-xl border-2 transition-all text-left ${selected===hrs?'border-[#1A1A1A] bg-black/[.02]':'border-black/[.08] hover:border-black/20'}`},
+            h('div',{className:'flex items-center justify-between'},
+              h('div',null,
+                h('div',{className:'font-medium text-[#1A1A1A] mb-1'},hrs+' 小时'),
+                h('div',{className:'text-sm text-[#8C8B88]'},desc)
+              ),
+              selected===hrs&&h('div',{className:'w-6 h-6 bg-[#1A1A1A] rounded-full flex items-center justify-center'},h(ICheck,{size:14,cls:'text-white'}))
+            )
+          )
+        )
+      ),
+      h('div',{className:'flex-1'}),
+      h('button',{onClick:start,disabled:!selected,className:'w-full bg-[#1A1A1A] text-white py-4 rounded-xl hover:bg-[#2A2A2A] transition-colors disabled:opacity-40 font-medium text-[15px]'},'开始冷静期')
+    )
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// DECISION PAGE
+// ════════════════════════════════════════════════════════════════════
+function DecisionPage(){
+  const nav=useNav();
+  const [decision,setDecision]=useState(null);
+  const [item,setItem]=useState(null);
+  useEffect(()=>{
+    const itemId=getCurrentItemId();
+    if(itemId)api(`/api/items/${itemId}`).then(d=>setItem(d.item)).catch(()=>{});
+  },[]);
+  const product={name:item?.name||'商品',price:item?.price||0,hrs:48};
+  const handleDecision=async(outcome)=>{
+    const itemId=getCurrentItemId();
+    try{
+      if(itemId)await api(`/api/items/${itemId}/decision`,{method:'POST',body:JSON.stringify({outcome})});
+    }catch(e){console.warn('决策记录失败',e);}
+    const map={SKIPPED:'resisted',WAITING:'waiting',BOUGHT:'bought'};
+    setDecision(map[outcome]);
+  };
+  const RWrap=({children})=>h('div',{className:'min-h-screen bg-[#F9F9F9] flex flex-col',style:{maxWidth:390,margin:'0 auto'}},
+    h('header',{className:'px-6 py-5 flex items-center justify-between'},
+      h('button',{onClick:()=>nav(-1),className:'w-10 h-10 flex items-center justify-center -ml-2 rounded-full hover:bg-black/5 transition-colors'},h(IX,{size:20,cls:'text-[#8C8B88]'})),
+      h('span',{className:'text-sm font-medium text-[#8C8B88]'},'最终决策'),
+      h('div',{className:'w-10 h-10'})
+    ),
+    h('main',{className:'flex-1 px-6 pb-12 flex flex-col justify-center py-10'},children)
+  );
+  if(!decision)return h('div',{className:'min-h-screen bg-[#F9F9F9] flex flex-col',style:{maxWidth:390,margin:'0 auto'}},
+    h('header',{className:'px-6 py-5 flex items-center justify-between sticky top-0 z-10',style:{background:'rgba(249,249,249,.8)',backdropFilter:'blur(12px)'}},
+      h('button',{onClick:()=>nav(-1),className:'w-10 h-10 flex items-center justify-center -ml-2 rounded-full hover:bg-black/5 transition-colors'},h(IX,{size:20,cls:'text-[#8C8B88]'})),
+      h('span',{className:'text-sm font-medium text-[#8C8B88]'},'最终决策'),
+      h('div',{className:'w-10 h-10'})
+    ),
+    h('main',{className:'flex-1 px-6 pb-12 flex flex-col'},
+      h('div',{className:'mt-8 mb-10 pa'},
+        h('div',{className:'w-12 h-12 bg-black/5 rounded-2xl flex items-center justify-center mb-6'},h(IClock,{size:24,cls:'text-[#3A3A38]'})),
+        h('h1',{className:'text-2xl font-semibold tracking-tight text-[#1A1A1A] mb-2'},'冷静期结束'),
+        h('p',{className:'text-[#8C8B88] text-[15px] leading-relaxed'},'经过 '+product.hrs+' 小时的沉淀，现在的决定更加趋于理性。你最后买了吗？')
+      ),
+      h('div',{className:'bg-white rounded-2xl p-5 shadow-sm border border-black/[.06] mb-10 pa a1'},
+        h('div',{className:'text-[13px] font-medium text-[#8C8B88] uppercase tracking-wider mb-3'},'目标商品'),
+        h('div',{className:'flex justify-between items-start gap-4'},
+          h('h3',{className:'text-[16px] font-medium leading-snug text-[#1A1A1A]'},product.name),
+          h('div',{className:'text-lg font-semibold tabular-nums text-[#1A1A1A] whitespace-nowrap'},'¥'+product.price.toLocaleString())
+        )
+      ),
+      h('div',{className:'mt-auto space-y-3'},
+        h('button',{onClick:()=>handleDecision('SKIPPED'),className:'w-full bg-[#1A1A1A] text-white rounded-2xl py-4 px-6 font-medium text-[16px] hover:bg-[#2A2A2A] press transition-all flex items-center justify-between'},
+          h('span',null,'没买，忍住了'),h(IChevR,{size:20,cls:'opacity-60'})
+        ),
+        h('div',{className:'flex gap-3'},
+          h('button',{onClick:()=>handleDecision('WAITING'),className:'flex-1 bg-white border border-black/[.1] text-[#3A3A38] rounded-2xl py-3.5 px-4 font-medium text-[15px] hover:bg-black/[.02] press transition-all'},'再等等'),
+          h('button',{onClick:()=>handleDecision('BOUGHT'),className:'flex-1 bg-white border border-black/[.1] text-[#3A3A38] rounded-2xl py-3.5 px-4 font-medium text-[15px] hover:bg-black/[.02] press transition-all'},'还是买了')
+        )
+      )
+    )
+  );
+  if(decision==='resisted')return h(RWrap,null,
+    h('div',{className:'text-center mb-10'},
+      h('div',{className:'w-20 h-20 bg-[#E8F5E9] rounded-[2rem] flex items-center justify-center mx-auto mb-8 cp'},h(ICheck,{size:40,cls:'text-[#2E7D32]'})),
+      h('h2',{className:'text-2xl font-semibold tracking-tight text-[#1A1A1A] mb-3 sc'},'完美克制'),
+      h('p',{className:'text-[#8C8B88] text-[15px] max-w-[260px] mx-auto leading-relaxed sc'},'你成功战胜了消费冲动，做出了理性的选择。')
+    ),
+    h('div',{className:'bg-white rounded-3xl p-8 shadow-sm border border-black/[.06] text-center mb-12 relative overflow-hidden sc'},
+      h('div',{className:'absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#81C784] to-[#4CAF50]'}),
+      h('div',{className:'text-[13px] font-medium text-[#8C8B88] uppercase tracking-wider mb-2'},'本次为你省下'),
+      h('div',{className:'text-[40px] font-bold tabular-nums text-[#1A1A1A] tracking-tight'},'¥'+product.price.toLocaleString())
+    ),
+    h('div',{className:'mt-auto space-y-3'},
+      h('button',{onClick:()=>nav('/stats'),className:'w-full bg-[#1A1A1A] text-white rounded-2xl py-4 px-6 font-medium text-[16px] hover:bg-[#2A2A2A] press transition-all'},'查看数据统计'),
+      h('button',{onClick:()=>nav('/'),className:'w-full text-[#8C8B88] rounded-2xl py-4 px-6 font-medium text-[15px] hover:text-[#1A1A1A] transition-colors'},'返回首页')
+    )
+  );
+  if(decision==='waiting')return h(RWrap,null,
+    h('div',{className:'text-center mb-10'},
+      h('div',{className:'w-20 h-20 bg-[#f3f3f5] rounded-[2rem] flex items-center justify-center mx-auto mb-8'},h(IClock,{size:40,cls:'text-[#3A3A38]'})),
+      h('h2',{className:'text-2xl font-semibold tracking-tight text-[#1A1A1A] mb-3'},'继续观望'),
+      h('p',{className:'text-[#8C8B88] text-[15px] max-w-[260px] mx-auto leading-relaxed'},'让子弹再飞一会儿，好的选择不怕等待。')
+    ),
+    h('div',{className:'mt-auto'},
+      h('button',{onClick:()=>nav('/'),className:'w-full bg-[#1A1A1A] text-white rounded-2xl py-4 px-6 font-medium text-[16px] hover:bg-[#2A2A2A] press transition-all'},'返回首页')
+    )
+  );
+  return h(RWrap,null,
+    h('div',{className:'text-center mb-10'},
+      h('div',{className:'w-20 h-20 bg-[#f3f3f5] rounded-[2rem] flex items-center justify-center mx-auto mb-8'},h(ICheckC,{size:40,cls:'text-[#3A3A38]'})),
+      h('h2',{className:'text-2xl font-semibold tracking-tight text-[#1A1A1A] mb-3'},'已记录购买'),
+      h('p',{className:'text-[#8C8B88] text-[15px] max-w-[260px] mx-auto leading-relaxed'},'经过深思熟虑的购买，相信它能为你带来价值。')
+    ),
+    h('div',{className:'mt-auto space-y-3'},
+      h('button',{onClick:()=>nav('/stats'),className:'w-full bg-[#1A1A1A] text-white rounded-2xl py-4 px-6 font-medium text-[16px] hover:bg-[#2A2A2A] press transition-all'},'查看数据统计'),
+      h('button',{onClick:()=>nav('/'),className:'w-full text-[#8C8B88] rounded-2xl py-4 px-6 font-medium text-[15px] hover:text-[#1A1A1A] transition-colors'},'返回首页')
+    )
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// STATS PAGE
+// ════════════════════════════════════════════════════════════════════
+function StatsPage(){
+  const nav=useNav();
+  const [stats,setStats]=useState(null);
+  const [items,setItems]=useState([]);
+  const [loading,setLoading]=useState(true);
+
+  useEffect(()=>{
+    Promise.all([
+      api('/api/stats'),
+      api('/api/items?limit=20'),
+    ]).then(([s,i])=>{
+      setStats(s);
+      setItems(i.items||[]);
+    }).catch(e=>console.error(e)).finally(()=>setLoading(false));
+  },[]);
+
+  const outcomeToStatus=(outcome,itemStatus)=>{
+    if(outcome==='BOUGHT')return 'bought';
+    if(outcome==='SKIPPED')return 'resisted';
+    if(outcome==='WAITING')return 'waiting';
+    if(itemStatus==='COOLING')return 'cooling';
+    return 'analyzing';
+  };
+
+  const maxCat=stats?.topCategories?.[0]?.count||1;
+  const maxHour=stats?.peakHours?.[0]?.count||1;
+
+  if(loading)return h(Layout,{title:'统计',showBack:true},
+    h('div',{className:'flex-1 flex items-center justify-center'},
+      h(ILoad,{size:32,cls:'text-[#8C8B88]'})
+    )
+  );
+
+  return h(Layout,{title:'统计',showBack:true},
+    h('div',{className:'flex-1 overflow-y-auto hs px-5 py-6'},
+      h('div',{className:'mb-6'},
+        h('h3',{className:'mb-3 flex items-center gap-2 text-[15px] font-medium text-[#1A1A1A]'},h(ISpark,{size:18}),'成就概览'),
+        h('div',{className:'grid grid-cols-2 gap-3'},
+          h(StatCard,{label:'忍住次数',value:String(stats?.resistedCount||0),icon:h(ITrendD,{size:16})}),
+          h(StatCard,{label:'节省金额',value:'¥'+(stats?.savedAmount||0).toLocaleString()}),
+          h(StatCard,{label:'分析次数',value:String(stats?.totalItems||0)}),
+          h(StatCard,{label:'购买次数',value:String(stats?.boughtCount||0),icon:h(IClock,{size:16})})
+        )
+      ),
+      stats?.topCategories?.length>0&&h('div',{className:'mb-6'},
+        h('h3',{className:'mb-3 text-[15px] font-medium text-[#1A1A1A]'},'高发消费类别'),
+        h('div',{className:'bg-white border border-black/[.06] rounded-xl p-4'},
+          h('div',{className:'space-y-4'},
+            stats.topCategories.map(({category,count})=>{
+              const pct=Math.round((count/maxCat)*100);
+              return h('div',{key:category},
+                h('div',{className:'flex items-center justify-between mb-2 text-sm'},
+                  h('span',{className:'text-[#1A1A1A]'},category),
+                  h('span',{className:'text-[#8C8B88]'},count+' 次')
+                ),
+                h('div',{className:'w-full h-2 bg-[#f3f3f5] rounded-full overflow-hidden'},
+                  h('div',{className:'h-full bg-[#1A1A1A] rounded-full',style:{width:pct+'%'}})
+                )
+              );
+            })
+          )
+        )
+      ),
+      stats?.peakHours?.length>0&&h('div',{className:'mb-6'},
+        h('h3',{className:'mb-3 text-[15px] font-medium text-[#1A1A1A]'},'高发消费时段'),
+        h('div',{className:'bg-white border border-black/[.06] rounded-xl p-4'},
+          h('div',{className:'space-y-4'},
+            stats.peakHours.map(({hour,count})=>{
+              const pct=Math.round((count/maxHour)*100);
+              return h('div',{key:hour},
+                h('div',{className:'flex items-center justify-between mb-2 text-sm'},
+                  h('span',{className:'text-[#1A1A1A]'},hour+':00'),
+                  h('span',{className:'text-[#8C8B88]'},count+' 次')
+                ),
+                h('div',{className:'w-full h-2 bg-[#f3f3f5] rounded-full overflow-hidden'},
+                  h('div',{className:'h-full bg-amber-500 rounded-full',style:{width:pct+'%'}})
+                )
+              );
+            })
+          )
+        )
+      ),
+      items.length>0&&h('div',{className:'mb-6'},
+        h('h3',{className:'mb-3 text-[15px] font-medium text-[#1A1A1A]'},'最近记录'),
+        h('div',{className:'space-y-3'},
+          items.map(item=>
+            h('div',{key:item.id,className:'bg-white border border-black/[.06] rounded-xl p-4'},
+              h('div',{className:'flex items-start justify-between mb-2'},
+                h('div',{className:'flex-1 min-w-0'},
+                  h('div',{className:'font-medium text-[#1A1A1A] mb-1 truncate'},item.name),
+                  h('div',{className:'text-sm text-[#8C8B88]'},(item.category||'未分类')+' · ¥'+item.price.toLocaleString())
+                ),
+                h('div',{className:'flex items-center gap-2'},
+                  h(SBadge,{status:outcomeToStatus(item.decision?.outcome,item.status)}),
+                  h('button',{
+                    onClick:async()=>{
+                      if(!confirm('确认删除这条记录？删除后统计数据会更新。'))return;
+                      try{
+                        await api(`/api/items/${item.id}`,{method:'DELETE'});
+                        const [s,i]=await Promise.all([api('/api/stats'),api('/api/items?limit=20')]);
+                        setStats(s);
+                        setItems(i.items||[]);
+                      }catch(e){console.warn('删除失败',e);}
+                    },
+                    className:'w-7 h-7 flex items-center justify-center rounded-full hover:bg-black/[.06] transition-colors text-[#B0AFA8] hover:text-[#5C5B58] shrink-0'
+                  },h(IX,{size:14}))
+                )
+              ),
+              h('div',{className:'text-xs text-[#8C8B88]'},item.createdAt?.slice(0,10))
+            )
+          )
+        )
+      ),
+      items.length===0&&!loading&&h('div',{className:'text-center py-16 text-[#8C8B88]'},
+        h('p',{className:'text-sm'},'还没有记录，快去添加第一件商品吧')
+      ),
+      h('div',{className:'sticky bottom-0 bg-[#fafafa] pt-4 pb-6 -mx-5 px-5'},
+        h('button',{onClick:()=>nav('/'),className:'w-full bg-[#1A1A1A] text-white py-4 rounded-xl hover:bg-[#2A2A2A] transition-colors font-medium text-[15px]'},'返回首页')
+      )
+    )
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════
+// APP ROOT
+// ════════════════════════════════════════════════════════════════════
+function App(){
+  const route=useRoute();
+  const pages={
+    '/':HomePage,
+    '/input':InputPage,
+    '/analysis':AnalysisPage,
+    '/cooldown':CooldownPage,
+    '/decision':DecisionPage,
+    '/stats':StatsPage,
+  };
+  const Page=pages[route]||HomePage;
+  return h(Page,{key:route});
+}
+
+function Root(){
+  return h(Router,null,h(App,null));
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(h(Root,null));
+
+</script></body></html>
