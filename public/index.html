@@ -42,7 +42,7 @@ const {useState,useEffect,useRef,useCallback}=React;
 const h=React.createElement;
 
 // ── API UTILS ──────────────────────────────────────────────────────
-const API_BASE=window.location.hostname==='localhost'?'http://localhost:3001':'http://localhost:3001';
+const API_BASE=window.location.hostname==='localhost'?'http://localhost:3000':'';
 function getDeviceId(){
   let id=localStorage.getItem('xbm_device_id');
   if(!id){id=crypto.randomUUID();localStorage.setItem('xbm_device_id',id);}
