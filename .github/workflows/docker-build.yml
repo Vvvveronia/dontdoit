@@ -13,10 +13,22 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Test build outside Docker
+        run: |
+          npm ci
+          npx prisma generate
+          DATABASE_URL=postgresql://user:pass@localhost:5432/db npm run build
+        continue-on-error: true
+
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
+          username: vvvvveronica
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Build and push

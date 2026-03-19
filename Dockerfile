@@ -1,7 +1,7 @@
 FROM node:20-alpine AS builder
 WORKDIR /app
 
-# 安装依赖（不跳过 scripts，Prisma 需要 postinstall）
+# 安装依赖
 COPY package*.json ./
 RUN npm ci
 
@@ -11,7 +11,7 @@ COPY . .
 # 生成 Prisma Client
 RUN npx prisma generate
 
-# 构建
+# 构建（打印完整错误）
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV DATABASE_URL=postgresql://user:pass@localhost:5432/db
 ENV NODE_ENV=production
