@@ -1,19 +1,20 @@
-FROM node:20-alpine AS base
+FROM node:20-alpine AS builder
 WORKDIR /app
 
-# 安装依赖
+# 安装依赖（不跳过 scripts，Prisma 需要 postinstall）
 COPY package*.json ./
 RUN npm ci
 
 # 复制代码
 COPY . .
 
-# 生成 Prisma Client（不需要数据库连接）
+# 生成 Prisma Client
 RUN npx prisma generate
 
-# 构建（跳过 lint 和类型检查，加快速度）
+# 构建
 ENV NEXT_TELEMETRY_DISABLED=1
-ENV DATABASE_URL=postgresql://placeholder:placeholder@localhost:5432/placeholder
+ENV DATABASE_URL=postgresql://user:pass@localhost:5432/db
+ENV NODE_ENV=production
 RUN npm run build
 
 # 生产镜像
@@ -24,13 +25,12 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# 复制 standalone 产物
-COPY --from=base /app/public ./public
-COPY --from=base /app/.next/standalone ./
-COPY --from=base /app/.next/static ./.next/static
-COPY --from=base /app/prisma ./prisma
-COPY --from=base /app/node_modules/.prisma ./node_modules/.prisma
-COPY --from=base /app/node_modules/@prisma ./node_modules/@prisma
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
 
 EXPOSE 3000
 

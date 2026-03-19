@@ -4,12 +4,9 @@ const nextConfig: NextConfig = {
   // 适合容器部署（Sealos / Docker）
   output: 'standalone',
 
-  // 构建时跳过类型检查和 ESLint（加快 CI 构建速度）
+  // 构建时跳过类型检查（加快 CI 构建速度）
   typescript: {
     ignoreBuildErrors: true,
-  },
-  eslint: {
-    ignoreDuringBuilds: true,
   },
 
   async headers() {
